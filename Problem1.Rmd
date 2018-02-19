@@ -1,0 +1,293 @@
+---
+title: "Practicum1"
+author: "Sagar"
+date: "February 3, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Q1
+
+Loading the dataset and renaming columns
+```{r}
+glass <- read.csv("C:/Users/Sagar Ghiya/Desktop/glass.txt", header = F)
+colnames(glass) <- c("ID","RI","Na","Mg","Al","Si","K","Ca","Ba","Fe","GlassType")
+```
+
+Q2
+Exploring the data set
+```{r}
+str(glass)
+```
+
+
+```{r}
+summary(glass)
+```
+```{r}
+sum(is.na(glass))
+```
+Q3
+
+```{r}
+x <- glass$Na
+h<-hist(x,col = "red",main="Histogram with Normal Curve") 
+xfit<-seq(min(x),max(x),length=40) 
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit,yfit,col='blue')
+```
+
+The histogram very closely resembles to the blue lined normal distribution plot. Hence the data is normally distributed. 
+KNN is a non-parametric method as it does not try to estimate parameters and then predict. It just takes the new sample and assigns it to a class based on votes from nearest neighbours. Thus the distribution of data does not matter in case of KNN. 
+
+Q4
+
+Min-max normalization
+```{r}
+glass1 <- glass[-1]
+
+```
+
+```{r}
+
+glass1[,1] <- (glass1[,1]-min(glass1[,1]))/(max(glass1[,1])-min(glass1[,1]))
+glass1[,2] <- (glass1[,2]-min(glass1[,2]))/(max(glass1[,2])-min(glass1[,2]))
+```
+
+Q5
+z score standardization
+```{r}
+zStandardization <- function(x) {
+  return (x-mean(x))/sd(x)
+}  
+```
+
+```{r}
+glass1[3:9] <- lapply(glass1[3:9],zStandardization)
+```
+
+Q6
+Stratified sample. Here each glass type is distributed as 50-50% to train and test data. 
+```{r}
+library(splitstackshape)
+set.seed(70)
+sample <- stratified(glass1, group = "GlassType", size =0.5, bothSets = T)
+test <- data.frame(sample[[1]])
+train <- data.frame(sample[[2]])
+```
+Q7
+Normalizing the new cases. Doing it the same way as previous. Binding the new cases to the original non-normalized data frame and then norrmalizing each and every record again. The stratified sample of train and test data are kept as it is and will be used only in future questions. 
+
+```{r}
+u1 <- c(1.51621,12.53,3.48,1.39,73.39,0.60,8.55,0.00,0.05)
+u2 <- c(1.5098,12.77,1.85,1.81,72.69,0.59,10.01,0.00,0.01)
+u <- data.frame(t(data.frame(u1,u2)))
+colnames(u) <- c("RI","Na","Mg","Al","Si","K","Ca","Ba","Fe")
+
+glass_new <- data.frame(rbind(glass[,2:10],u))
+
+glass_new[,1] <- (glass_new[,1]-min(glass_new[,1]))/(max(glass_new[,1])-min(glass_new[,1]))
+glass_new[,2] <- (glass_new[,2]-min(glass_new[,2]))/(max(glass_new[,2])-min(glass_new[,2]))
+
+
+
+```
+
+```{r}
+glass_new[3:9] <- lapply(glass_new[3:9],zStandardization)
+
+
+```
+Preparing unknown data and seperating the training data from test. Previously it was binded for normalization.
+
+```{r}
+glass_testdata <- glass_new[(nrow(glass_new)-1):nrow(glass_new),]
+unknown1 <- as.numeric(glass_new[(nrow(glass_new)-1),])
+unknown2 <- as.numeric(glass_new[nrow(glass_new),])
+glass_traindata <- glass_new[1:(nrow(glass_new)-2),]
+glass_traindata <- cbind.data.frame(glass_traindata,glass[,11])
+colnames(glass_traindata)[10] <- "GlassType"
+
+```
+
+Implementing KNN Algorithm:
+Function to calculate distance between two points. 
+
+```{r}
+dist <- function(p,q) {
+  d <- 0
+  for( i in 1:length(p)) {
+    d <- d + (p[i]-q[i])^2
+  }
+  dist <- sqrt(d)
+}  
+
+
+
+
+```
+
+Neighbours function:
+
+```{r}
+neighbors <- function(train_data,s) {
+  
+  m <- nrow(train_data)
+  ds <- numeric(m)
+ 
+  q <- as.numeric(s[c(1,2,3,4,5,6,7,8,9)])
+  
+  for( i in 1:m) {
+    p <- train_data[i,c(1,2,3,4,5,6,7,8,9)]
+    
+    ds[i] <- dist(p,q)
+  }  
+  
+  neighbors <- ds
+    }
+
+
+
+```
+
+Function to figure out k closest neighbours
+```{r}
+
+k.closest <- function(neighbors,k) {
+  ordered.neighbors <- order(neighbors)
+  k.closest <- ordered.neighbors[1:k]
+}
+
+```
+
+Mode function:
+
+```{r}
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x,ux)))]
+}
+```
+
+Combining all functions into one i.e you only need to call this function and pass test data.
+```{r}
+knn1 <- function(train_data,s,k) {
+  nb <- neighbors(train_data,s)
+  f <- k.closest(nb,k)
+  knn1 <- Mode(train_data$GlassType[f])
+  
+}
+
+```
+
+Prediction for case 1:
+
+```{r}
+nn1 <- knn1(glass_traindata,unknown1,10)
+nn1
+```
+Prediction for case 2:
+
+```{r}
+nn2 <- knn1(glass_traindata,unknown2,10)
+nn2
+```
+
+Q8
+Applying knn from class with k=14
+
+```{r}
+library(class)
+test_prediction <- knn(train = glass_traindata[,1:9], test = glass_testdata, cl = glass_traindata[,10], k=14)
+```
+
+
+```{r}
+test_prediction
+```
+
+Q9
+
+Applying knn from class against stratified test data with k =14.
+```{r}
+test_prediction_Q9 <- knn(train = train[,1:9], test = test[,1:9], cl = train[,10], k=14)
+```
+
+
+```{r}
+library(gmodels)
+CrossTable(x = test[,10], y = test_prediction_Q9, chisq = FALSE)
+```
+
+Accuracy = (66/105) *100 = 62.86%
+
+Q10
+
+Calculating accuracy for k=5:14. looping knn function for each row of test data. 
+```{r}
+nn <- vector()
+k <- c(5,6,7,8,9,10,11,12,13,14)
+accuracy <- numeric(length(k))
+inc <- 1
+for(j in 5:14) {
+for ( i in 1:nrow(test)) {
+  nn[i] <- knn1(train,test[i,1:9],j)
+}
+a <- table(nn,test[,10])
+accuracy[inc] <- (sum(diag(a))/sum(a)) *100
+inc <- inc + 1
+}
+```
+
+```{r}
+which.max(accuracy)
+
+
+```
+
+Accuracy is maximum for k = 5. '1' output refers to first value of accuracy which is for k = 5. Optimal k is 5.
+
+Plotting k vs accuracy
+
+```{r}
+plot(k,accuracy,type='l')
+
+```
+
+Q11
+
+Plotting k vs incorrect classifications
+
+```{r}
+library(ggplot2)
+df<- data.frame(k,(100-accuracy))
+colnames(df)[2] <- 'accuracy'
+ggplot(df,aes(x=k,y=accuracy)) + geom_line()
+
+
+```
+
+Q12
+Packge of my choice = class
+k of my choice = 13
+
+```{r}
+library(class)
+test_prediction_Q12 <- knn(train = train[,1:9], test = test[,1:9], cl = train[,10], k=13)
+CrossTable(x = test[,10], y = test_prediction_Q12, chisq = FALSE)
+```
+
+Accuracy = (68/105) *100 = 64.76%
+
+
+Q13
+
+For each new case, the algorithm needs to calculate distance from all points in the training data set for all features.
+So the run-time complexity should be O(wnm). 
+
+The algorithm takes more time as w,m and n increase. The algorithm would get slower as m and n increase as the computation increases.
+
